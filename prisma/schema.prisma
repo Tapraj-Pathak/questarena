@@ -1,0 +1,236 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+enum AccountStatus {
+  ACTIVE
+  SUSPENDED
+  DELETED
+}
+
+enum CampaignStatus {
+  DRAFT
+  PUBLISHED
+  FUNDED
+  ACTIVE
+  COMPLETED
+  CANCELLED
+  DISPUTED
+  FINALIZED
+}
+
+enum SponsorType {
+  GAME_DEVELOPER
+  BRAND
+}
+
+enum SessionStatus {
+  CREATED
+  ACTIVE
+  SUBMITTED
+  EXPIRED
+  VERIFIED
+  DISPUTED
+  FINALIZED
+  CANCELLED
+}
+
+enum ResultStatus {
+  PENDING
+  VERIFIED
+  FINALIZED
+  DISPUTED
+  REJECTED
+}
+
+model User {
+  id             String        @id @default(cuid())
+  clerkUserId    String        @unique
+  displayName    String
+  username       String?       @unique
+  email          String?
+  phoneNumber    String?
+  imageUrl       String?
+  status         AccountStatus @default(ACTIVE)
+  capabilities   String[]      @default([])
+  isAdmin        Boolean       @default(false)
+  createdAt      DateTime      @default(now())
+  updatedAt      DateTime      @updatedAt
+  campaigns      Campaign[]    @relation("CampaignOwner")
+  participations CampaignParticipant[]
+  gameSessions   GameSession[]
+  notifications  Notification[]
+  activityLogs   ActivityLog[]
+
+  @@index([email])
+  @@index([status])
+}
+
+model Game {
+  id             String   @id @default(cuid())
+  slug           String   @unique
+  name           String
+  description    String
+  category       String
+  developerName  String
+  thumbnailUrl   String?
+  bannerUrl      String?
+  integrationType String
+  launchUrl      String?
+  playable       Boolean  @default(false)
+  rules          Json
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
+  campaigns      Campaign[]
+  sessions       GameSession[]
+
+  @@index([category])
+  @@index([playable])
+}
+
+model Campaign {
+  id             String         @id @default(cuid())
+  slug           String         @unique
+  ownerId        String
+  gameId         String
+  title          String
+  description    String
+  sponsorType    SponsorType
+  sponsorName    String
+  status         CampaignStatus @default(DRAFT)
+  prizePoolUnits BigInt         @default(0)
+  currency       String         @default("USDC")
+  startsAt       DateTime
+  endsAt         DateTime
+  maxParticipants Int?
+  rules          Json
+  contractAddress String?
+  createdAt      DateTime       @default(now())
+  updatedAt      DateTime       @updatedAt
+  owner          User           @relation("CampaignOwner", fields: [ownerId], references: [id])
+  game           Game           @relation(fields: [gameId], references: [id])
+  participants   CampaignParticipant[]
+  sessions       GameSession[]
+  placements     CampaignPlacement[]
+  transactions   BlockchainTransaction[]
+
+  @@index([status, startsAt])
+  @@index([ownerId])
+  @@index([gameId])
+}
+
+model CampaignParticipant {
+  id         String   @id @default(cuid())
+  campaignId String
+  userId     String
+  joinedAt   DateTime @default(now())
+  campaign   Campaign @relation(fields: [campaignId], references: [id], onDelete: Cascade)
+  user       User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([campaignId, userId])
+  @@index([userId])
+}
+
+model CampaignPlacement {
+  id         String   @id @default(cuid())
+  campaignId String
+  placement  String
+  creativeUrl String?
+  startsAt   DateTime?
+  endsAt     DateTime?
+  campaign   Campaign @relation(fields: [campaignId], references: [id], onDelete: Cascade)
+
+  @@unique([campaignId, placement])
+}
+
+model GameSession {
+  id          String        @id @default(cuid())
+  campaignId  String
+  gameId      String
+  playerId    String
+  rulesHash   String
+  seed        String
+  configuration Json
+  status      SessionStatus @default(CREATED)
+  startsAt    DateTime?
+  endsAt      DateTime?
+  expiresAt   DateTime
+  createdAt   DateTime      @default(now())
+  updatedAt   DateTime      @updatedAt
+  campaign    Campaign      @relation(fields: [campaignId], references: [id], onDelete: Cascade)
+  game        Game          @relation(fields: [gameId], references: [id])
+  player      User          @relation(fields: [playerId], references: [id], onDelete: Cascade)
+  evidence    GameEvidence?
+  result      GameResult?
+
+  @@index([campaignId, status])
+  @@index([playerId, status])
+  @@index([expiresAt])
+}
+
+model GameEvidence {
+  id          String   @id @default(cuid())
+  sessionId   String   @unique
+  resultHash  String   @unique
+  evidenceRef String
+  payload     Json
+  submittedAt DateTime @default(now())
+  session     GameSession @relation(fields: [sessionId], references: [id], onDelete: Cascade)
+}
+
+model GameResult {
+  id           String       @id @default(cuid())
+  sessionId    String       @unique
+  score        BigInt
+  accuracy     Float?
+  completionMs Int?
+  status       ResultStatus @default(PENDING)
+  submittedAt  DateTime     @default(now())
+  finalizedAt  DateTime?
+  session      GameSession  @relation(fields: [sessionId], references: [id], onDelete: Cascade)
+
+  @@index([status, score])
+}
+
+model Notification {
+  id        String   @id @default(cuid())
+  userId    String
+  type      String
+  title     String
+  message   String
+  readAt    DateTime?
+  createdAt DateTime @default(now())
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId, readAt, createdAt])
+}
+
+model ActivityLog {
+  id         String   @id @default(cuid())
+  userId     String?
+  action     String
+  entityType String
+  entityId   String?
+  metadata   Json?
+  createdAt  DateTime @default(now())
+  user       User?    @relation(fields: [userId], references: [id], onDelete: SetNull)
+
+  @@index([entityType, entityId])
+}
+
+model BlockchainTransaction {
+  id        String   @id @default(cuid())
+  campaignId String?
+  txHash    String   @unique
+  chainId   Int?
+  kind      String
+  status    String
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+  campaign  Campaign? @relation(fields: [campaignId], references: [id], onDelete: SetNull)
+}

@@ -1,69 +1,156 @@
-import Image from "next/image";
+import Link from "next/link";
+import { ArrowRight, Gamepad2, ShieldCheck, Trophy, Users } from "lucide-react";
+
+const competitions = [
+  {
+    title: "Neon Reaction",
+    category: "Reaction challenge",
+    reward: "$250 USDC",
+    entries: "128 players",
+    accent: "cyan",
+  },
+  {
+    title: "Daily Reflex Sprint",
+    category: "Sponsored tournament",
+    reward: "$500 USDC",
+    entries: "246 players",
+    accent: "purple",
+  },
+  {
+    title: "Precision Circuit",
+    category: "Skill competition",
+    reward: "$150 USDC",
+    entries: "92 players",
+    accent: "orange",
+  },
+];
 
 export default function Home() {
   return (
-    <div className="flex flex-col flex-1 items-center justify-center bg-zinc-50 font-sans dark:bg-black">
-      <main className="flex flex-1 w-full max-w-3xl flex-col items-center justify-between py-32 px-16 bg-white dark:bg-black sm:items-start">
-        <Image
-          className="dark:invert h-5 w-[100px]"
-          src="/next.svg"
-          alt="Next.js logo"
-          width={100}
-          height={20}
-          priority
-        />
-        <div className="flex flex-col items-center gap-6 text-center sm:items-start sm:text-left">
-          <h1 className="max-w-xs text-3xl font-semibold leading-10 tracking-tight text-black dark:text-zinc-50">
-            To get started, edit the{" "}
-            <code className="rounded bg-black/[.06] px-1.5 py-0.5 font-mono text-[0.9em] dark:bg-white/[.08]">
-              page.tsx
-            </code>{" "}
-            file.
-          </h1>
-          <p className="max-w-md text-lg leading-8 text-zinc-600 dark:text-zinc-400">
-            Looking for a starting point or more instructions? Head over to{" "}
-            <a
-              href="https://vercel.com/templates?framework=next.js&utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-              className="font-medium text-zinc-950 dark:text-zinc-50"
-            >
-              Templates
-            </a>{" "}
-            or the{" "}
-            <a
-              href="https://nextjs.org/learn?utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-              className="font-medium text-zinc-950 dark:text-zinc-50"
-            >
-              Learning
-            </a>{" "}
-            center.
-          </p>
+    <main className="home-page">
+      <nav className="site-nav" aria-label="Main navigation">
+        <Link className="site-brand" href="/" aria-label="QuestArena home">
+          <span className="brand-mark"><Gamepad2 size={19} /></span>
+          QUESTARENA
+        </Link>
+        <div className="nav-links">
+          <Link href="#competitions">Competitions</Link>
+          <Link href="/games/neon-reaction">Games</Link>
+          <Link href="#how-it-works">Leaderboards</Link>
+          <Link href="#sponsors">For Sponsors</Link>
         </div>
-        <div className="flex flex-col gap-4 text-base font-medium sm:flex-row">
-          <a
-            className="flex h-12 w-full items-center justify-center gap-2 rounded-full bg-foreground px-5 text-background transition-colors hover:bg-[#383838] dark:hover:bg-[#ccc] md:w-[158px]"
-            href="https://vercel.com/new?utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-            target="_blank"
-            rel="noopener noreferrer"
-          >
-            <Image
-              className="dark:invert h-[14px] w-4"
-              src="/vercel.svg"
-              alt="Vercel logomark"
-              width={16}
-              height={14}
-            />
-            Deploy Now
-          </a>
-          <a
-            className="flex h-12 w-full items-center justify-center rounded-full border border-solid border-black/[.08] px-5 transition-colors hover:border-transparent hover:bg-black/[.04] dark:border-white/[.145] dark:hover:bg-[#1a1a1a] md:w-[158px]"
-            href="https://nextjs.org/docs?utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-            target="_blank"
-            rel="noopener noreferrer"
-          >
-            Documentation
-          </a>
+        <div className="nav-actions">
+          <Link className="nav-sign-in" href="/sign-in">Sign in</Link>
+          <Link className="nav-sign-up" href="/sign-up">Create account</Link>
         </div>
-      </main>
-    </div>
+      </nav>
+
+      <section className="hero">
+        <div className="hero-copy">
+          <div className="eyebrow"><span /> Live competitions are open</div>
+          <h1>Your next competition<br />starts here.</h1>
+          <p>Discover sponsored games, compete in challenges, and earn rewards.</p>
+          <div className="hero-actions">
+            <Link className="primary-button" href="/games/neon-reaction">
+              Explore games <ArrowRight size={18} />
+            </Link>
+            <Link className="secondary-button" href="/sign-up">Launch a campaign</Link>
+          </div>
+          <div className="hero-proof">
+            <span><strong>12K+</strong> active players</span>
+            <span><strong>$48K</strong> rewards distributed</span>
+            <span><strong>Verified</strong> competition results</span>
+          </div>
+        </div>
+
+        <div className="hero-panel" aria-label="Featured competition">
+          <div className="panel-grid" />
+          <div className="live-chip"><span /> LIVE NOW</div>
+          <div className="target-display">
+            <div className="target-ring target-ring-outer">
+              <div className="target-ring target-ring-inner" />
+            </div>
+            <Gamepad2 className="target-icon" size={34} />
+          </div>
+          <div className="panel-footer">
+            <div>
+              <span>Featured challenge</span>
+              <strong>Neon Reaction</strong>
+            </div>
+            <div className="panel-prize">
+              <span>Prize pool</span>
+              <strong>$250 USDC</strong>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <section className="featured-section" id="competitions">
+        <div className="section-heading">
+          <div>
+            <span className="section-kicker">COMPETE THIS WEEK</span>
+            <h2>Featured competitions</h2>
+          </div>
+          <Link href="/games/neon-reaction">View all competitions <ArrowRight size={16} /></Link>
+        </div>
+        <div className="competition-grid">
+          {competitions.map((competition) => (
+            <Link className={`competition-card accent-${competition.accent}`} href="/games/neon-reaction" key={competition.title}>
+              <div className="competition-art">
+                <div className="competition-orbit" />
+                <Trophy size={28} />
+              </div>
+              <div className="competition-content">
+                <span className="competition-category">{competition.category}</span>
+                <h3>{competition.title}</h3>
+                <div className="competition-meta">
+                  <span><strong>{competition.reward}</strong> prize pool</span>
+                  <span>{competition.entries}</span>
+                </div>
+              </div>
+            </Link>
+          ))}
+        </div>
+      </section>
+
+      <section className="steps-section" id="how-it-works">
+        <div className="section-heading">
+          <div>
+            <span className="section-kicker">HOW IT WORKS</span>
+            <h2>From play to reward</h2>
+          </div>
+        </div>
+        <div className="steps-grid">
+          <div className="step-card">
+            <Gamepad2 />
+            <span>01</span>
+            <h3>Choose a challenge</h3>
+            <p>Enter a sponsored competition built around a real playable game.</p>
+          </div>
+          <div className="step-card">
+            <ShieldCheck />
+            <span>02</span>
+            <h3>Play and prove</h3>
+            <p>Complete the challenge while QuestArena records and verifies your result.</p>
+          </div>
+          <div className="step-card">
+            <Users />
+            <span>03</span>
+            <h3>Climb the rankings</h3>
+            <p>Compare your score and collect rewards when the competition closes.</p>
+          </div>
+        </div>
+      </section>
+
+      <section className="sponsor-banner" id="sponsors">
+        <div>
+          <span className="section-kicker">FOR BRANDS & DEVELOPERS</span>
+          <h2>Turn your audience into active players.</h2>
+        </div>
+        <Link className="secondary-button" href="/sign-up">
+          Launch a campaign <ArrowRight size={18} />
+        </Link>
+      </section>
+    </main>
   );
 }
