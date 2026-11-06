@@ -3,11 +3,11 @@ services:
     image: postgres:16-alpine
     restart: unless-stopped
     environment:
-      POSTGRES_DB: questarena
-      POSTGRES_USER: questarena
-      POSTGRES_PASSWORD: questarena
+      POSTGRES_DB: ${POSTGRES_DB:-questarena}
+      POSTGRES_USER: ${POSTGRES_USER:-questarena}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?Set POSTGRES_PASSWORD in your environment}
     ports:
-      - "5432:5432"
+      - "127.0.0.1:5432:5432"
     volumes:
       - questarena_postgres:/var/lib/postgresql/data
     healthcheck:

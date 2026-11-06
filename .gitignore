@@ -23,6 +23,13 @@
 # misc
 .DS_Store
 *.pem
+*.key
+*.p12
+*.pfx
+*verifier-keys*.json
+.verifier-keys.json
+*.log
+/.devdb/
 
 # debug
 npm-debug.log*
@@ -39,3 +46,6 @@ yarn-error.log*
 # typescript
 *.tsbuildinfo
 next-env.d.ts
+
+# local screenshots
+/.shots/

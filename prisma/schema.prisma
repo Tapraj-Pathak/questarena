@@ -48,6 +48,38 @@ enum ResultStatus {
   REJECTED
 }
 
+enum VerifierStatus {
+  ACTIVE
+  RETIRED
+}
+
+enum VerificationDecision {
+  APPROVE
+  REJECT
+}
+
+enum DisputeStatus {
+  OPEN
+  RESOLVED
+  REJECTED
+}
+
+enum ClaimStatus {
+  PENDING
+  PROCESSING
+  PAID
+  FAILED
+  REFUNDED
+}
+
+enum WorkflowStatus {
+  QUEUED
+  RUNNING
+  SUCCEEDED
+  FAILED
+  CANCELLED
+}
+
 model User {
   id             String        @id @default(cuid())
   clerkUserId    String        @unique
@@ -61,14 +93,63 @@ model User {
   isAdmin        Boolean       @default(false)
   createdAt      DateTime      @default(now())
   updatedAt      DateTime      @updatedAt
+  playerProfile  PlayerProfile?
+  developerProfile GameDeveloperProfile?
+  brandProfile   BrandSponsorProfile?
+  games          Game[]
   campaigns      Campaign[]    @relation("CampaignOwner")
   participations CampaignParticipant[]
   gameSessions   GameSession[]
   notifications  Notification[]
   activityLogs   ActivityLog[]
+  claims         RewardClaim[]
+  disputes       Dispute[]
+  worldIdVerifications WorldIDVerification[]
 
   @@index([email])
   @@index([status])
+}
+
+model PlayerProfile {
+  id             String   @id @default(cuid())
+  userId         String   @unique
+  displayName    String
+  bio            String?
+  totalScore     BigInt   @default(0)
+  gamesPlayed    Int      @default(0)
+  bestScore      BigInt   @default(0)
+  avgAccuracy    Float    @default(0)
+  matchesPlayed  Int      @default(0)
+  wins           Int      @default(0)
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
+  user           User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+}
+
+model GameDeveloperProfile {
+  id         String   @id @default(cuid())
+  userId     String   @unique
+  studioName String
+  website    String?
+  bio        String?
+  verified   Boolean  @default(false)
+  createdAt  DateTime @default(now())
+  updatedAt  DateTime @updatedAt
+  user       User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+}
+
+model BrandSponsorProfile {
+  id          String   @id @default(cuid())
+  userId      String   @unique
+  brandName   String
+  logoUrl     String?
+  website     String?
+  description String?
+  verified    Boolean  @default(false)
+  isDemo      Boolean  @default(false)
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+  user        User     @relation(fields: [userId], references: [id], onDelete: Cascade)
 }
 
 model Game {
@@ -78,19 +159,36 @@ model Game {
   description    String
   category       String
   developerName  String
+  developerId    String?
   thumbnailUrl   String?
   bannerUrl      String?
-  integrationType String
+  integrationType String // BUILT_IN | EMBEDDED | EXTERNAL_LINK | CUSTOM_ADAPTER
   launchUrl      String?
   playable       Boolean  @default(false)
   rules          Json
+  featured       Boolean  @default(false)
   createdAt      DateTime @default(now())
   updatedAt      DateTime @updatedAt
+  developer      User?    @relation(fields: [developerId], references: [id], onDelete: SetNull)
   campaigns      Campaign[]
   sessions       GameSession[]
+  adapters       GameAdapter[]
 
   @@index([category])
   @@index([playable])
+  @@index([featured])
+}
+
+model GameAdapter {
+  id           String   @id @default(cuid())
+  gameId       String
+  adapterName  String
+  version      String
+  validateSchema Json
+  createdAt    DateTime @default(now())
+  game         Game     @relation(fields: [gameId], references: [id], onDelete: Cascade)
+
+  @@unique([gameId, adapterName])
 }
 
 model Campaign {
@@ -102,6 +200,7 @@ model Campaign {
   description    String
   sponsorType    SponsorType
   sponsorName    String
+  sponsorLogoUrl String?
   status         CampaignStatus @default(DRAFT)
   prizePoolUnits BigInt         @default(0)
   currency       String         @default("USDC")
@@ -109,7 +208,11 @@ model Campaign {
   endsAt         DateTime
   maxParticipants Int?
   rules          Json
+  verifyThreshold Int           @default(3)
+  requireWorldId Boolean        @default(false)
   contractAddress String?
+  cancellationReason String?
+  viewCount      Int            @default(0)
   createdAt      DateTime       @default(now())
   updatedAt      DateTime       @updatedAt
   owner          User           @relation("CampaignOwner", fields: [ownerId], references: [id])
@@ -118,6 +221,8 @@ model Campaign {
   sessions       GameSession[]
   placements     CampaignPlacement[]
   transactions   BlockchainTransaction[]
+  claims         RewardClaim[]
+  workflows      WorkflowExecution[]
 
   @@index([status, startsAt])
   @@index([ownerId])
@@ -189,12 +294,106 @@ model GameResult {
   score        BigInt
   accuracy     Float?
   completionMs Int?
+  moves        Int?
   status       ResultStatus @default(PENDING)
+  verifiedCount Int         @default(0)
+  requiredCount Int         @default(3)
+  resultHash   String?      @unique
   submittedAt  DateTime     @default(now())
   finalizedAt  DateTime?
   session      GameSession  @relation(fields: [sessionId], references: [id], onDelete: Cascade)
+  signatures   VerificationSignature[]
+  disputes     Dispute[]
+  claim        RewardClaim?
 
   @@index([status, score])
+}
+
+model Verifier {
+  id         String         @id @default(cuid())
+  name       String         @unique
+  publicKey  String         @unique
+  status     VerifierStatus @default(ACTIVE)
+  createdAt  DateTime       @default(now())
+  signatures VerificationSignature[]
+}
+
+model VerificationSignature {
+  id          String              @id @default(cuid())
+  resultId    String
+  verifierId  String
+  signature   String
+  decision    VerificationDecision
+  reason      String
+  signedAt    DateTime            @default(now())
+  result      GameResult          @relation(fields: [resultId], references: [id], onDelete: Cascade)
+  verifier    Verifier            @relation(fields: [verifierId], references: [id])
+
+  @@unique([resultId, verifierId])
+  @@index([resultId])
+}
+
+model Dispute {
+  id          String         @id @default(cuid())
+  resultId    String
+  raisedBy    String
+  reason      String
+  status      DisputeStatus  @default(OPEN)
+  resolution  String?
+  createdAt   DateTime       @default(now())
+  resolvedAt  DateTime?
+  result      GameResult     @relation(fields: [resultId], references: [id], onDelete: Cascade)
+  user        User           @relation(fields: [raisedBy], references: [id], onDelete: Cascade)
+
+  @@index([resultId])
+  @@index([status])
+}
+
+model RewardClaim {
+  id           String       @id @default(cuid())
+  resultId     String       @unique
+  campaignId   String
+  userId       String
+  amountUnits  BigInt
+  currency     String       @default("USDC")
+  txHash       String?
+  status       ClaimStatus  @default(PENDING)
+  createdAt    DateTime     @default(now())
+  updatedAt    DateTime     @updatedAt
+  result       GameResult   @relation(fields: [resultId], references: [id], onDelete: Cascade)
+  campaign     Campaign     @relation(fields: [campaignId], references: [id], onDelete: Cascade)
+  user         User         @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([campaignId, status])
+  @@index([userId])
+}
+
+model BlockchainTransaction {
+  id        String   @id @default(cuid())
+  campaignId String?
+  txHash    String   @unique
+  chainId   Int?
+  kind      String
+  status    String
+  fromAddress String?
+  toAddress  String?
+  amountUnits BigInt?
+  metadata  Json?
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+  campaign  Campaign? @relation(fields: [campaignId], references: [id], onDelete: SetNull)
+}
+
+model WorldIDVerification {
+  id            String   @id @default(cuid())
+  userId        String
+  campaignId    String?
+  nullifierHash String   @unique
+  credentialType String
+  createdAt     DateTime @default(now())
+  user          User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
 }
 
 model Notification {
@@ -223,14 +422,21 @@ model ActivityLog {
   @@index([entityType, entityId])
 }
 
-model BlockchainTransaction {
-  id        String   @id @default(cuid())
-  campaignId String?
-  txHash    String   @unique
-  chainId   Int?
-  kind      String
-  status    String
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
-  campaign  Campaign? @relation(fields: [campaignId], references: [id], onDelete: SetNull)
+model WorkflowExecution {
+  id          String         @id @default(cuid())
+  campaignId  String?
+  resultId    String?
+  workflowId  String
+  runId       String         @unique
+  status      WorkflowStatus @default(QUEUED)
+  triggerType String
+  payload     Json?
+  result      Json?
+  startedAt   DateTime?
+  finishedAt  DateTime?
+  createdAt   DateTime       @default(now())
+  campaign    Campaign?      @relation(fields: [campaignId], references: [id], onDelete: SetNull)
+
+  @@index([status])
+  @@index([runId])
 }

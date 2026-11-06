@@ -1,37 +1,91 @@
 import { NextResponse } from "next/server";
 import { z } from "zod";
+import { prisma } from "@/lib/prisma";
+import { handle, readJson } from "@/lib/api";
+import { ApiError, requireUser } from "@/lib/session";
+import { getAdapter } from "@/lib/game-adapters";
+import { recordWorkflow, runVerification } from "@/lib/verification";
 
-const resultSchema = z.object({
-  events: z.array(z.object({
-    type: z.enum(["hit", "miss"]),
-    reactionMs: z.number().int().min(0).max(1400).optional(),
-  })).length(10),
-});
+const schema = z.object({ payload: z.unknown() });
 
-export async function POST(request: Request, context: { params: Promise<{ sessionId: string }> }) {
+export const POST = handle(async (request: Request, context: { params: Promise<{ sessionId: string }> }) => {
+  const user = await requireUser();
   const { sessionId } = await context.params;
-  const parsed = resultSchema.safeParse(await request.json());
-  if (!parsed.success || !sessionId || sessionId.length > 128) {
-    return NextResponse.json({ error: "Invalid result payload" }, { status: 400 });
+  const { payload } = await readJson(request, schema);
+
+  const session = await prisma.gameSession.findUnique({
+    where: { id: sessionId },
+    include: { game: true, campaign: true, result: true, evidence: true },
+  });
+  if (!session) throw new ApiError(404, "Game session not found.");
+  if (session.playerId !== user.id) throw new ApiError(403, "This session belongs to another player.");
+  if (session.result) throw new ApiError(409, "This session has already been submitted.");
+  if (session.expiresAt.getTime() < Date.now()) {
+    await prisma.gameSession.update({ where: { id: session.id }, data: { status: "EXPIRED" } });
+    throw new ApiError(409, "This session expired. Start a new attempt.");
   }
 
-  const hits = parsed.data.events.filter((event) => event.type === "hit");
-  const score = hits.reduce((total, event) => {
-    const reaction = event.reactionMs ?? 1400;
-    return total + Math.max(100, 1100 - reaction);
-  }, 0);
-  const scoreAccuracy = Math.round((hits.length / parsed.data.events.length) * 100);
+  const adapter = getAdapter(session.game.slug);
+  if (!adapter) throw new ApiError(409, "No adapter for this game.");
 
-  return NextResponse.json({
-    sessionId,
-    result: {
-      score,
-      accuracy: scoreAccuracy,
-      hits: hits.length,
-      misses: parsed.data.events.length - hits.length,
-      averageReactionMs: hits.length
-        ? Math.round(hits.reduce((total, event) => total + (event.reactionMs ?? 1400), 0) / hits.length)
-        : null,
+  const outcome = adapter.validate(session.configuration as Record<string, unknown>, payload);
+  if (!outcome.ok) throw new ApiError(422, outcome.reason);
+
+  const resultHash = adapter.resultHash({ seed: session.seed, payload, score: outcome.score });
+
+  const result = await prisma.$transaction(async (tx) => {
+    await tx.gameSession.update({
+      where: { id: session.id },
+      data: { status: "SUBMITTED", endsAt: new Date() },
+    });
+    await tx.gameEvidence.create({
+      data: {
+        sessionId: session.id,
+        resultHash,
+        // Local evidence store; the interface allows IPFS/CID references.
+        evidenceRef: `local://evidence/${session.id}.json`,
+        payload: payload as object,
+      },
+    });
+    return tx.gameResult.create({
+      data: {
+        sessionId: session.id,
+        score: BigInt(outcome.score),
+        accuracy: outcome.accuracy,
+        completionMs: outcome.completionMs,
+        moves: outcome.moves,
+        resultHash,
+        requiredCount: session.campaign.verifyThreshold || 3,
+      },
+    });
+  });
+
+  await recordWorkflow(session.campaignId, result.id);
+  const verification = await runVerification(result.id);
+
+  await prisma.notification.create({
+    data: {
+      userId: user.id,
+      type: "RESULT_SUBMITTED",
+      title: "Run submitted",
+      message: `${outcome.score.toLocaleString()} points in ${session.campaign.title}. ${verification.status === "verified" ? "Verifiers approved it." : "Verification is in progress."}`,
     },
   });
-}
+
+  const updated = await prisma.gameResult.findUnique({ where: { id: result.id } });
+
+  return NextResponse.json({
+    result: {
+      id: result.id,
+      score: Number(updated?.score ?? outcome.score),
+      accuracy: updated?.accuracy ?? outcome.accuracy,
+      completionMs: updated?.completionMs ?? outcome.completionMs,
+      moves: updated?.moves ?? outcome.moves,
+      status: updated?.status ?? "PENDING",
+      verifiedCount: updated?.verifiedCount ?? 0,
+      requiredCount: updated?.requiredCount ?? 3,
+      detail: outcome.detail,
+    },
+    verification: verification.status,
+  });
+});
